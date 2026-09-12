@@ -272,7 +272,7 @@
         <div class="ring-pct" id="ringPct">0%</div>
       </div>
       <div class="stat">
-        <button id="authBtn" style="background:var(--bg-elev-2); border:1px solid var(--border); color:var(--text); padding:8px 12px; border-radius:4px; cursor:pointer; font-family:'IBM Plex Mono',monospace; font-size:11px;">Log In</button>
+        <button id="authBtn" style="background:var(--bg-elev-2); border:1px solid var(--border); color:var(--text); padding:8px 12px; border-radius:4px; cursor:pointer; font-family:'IBM Plex Mono',monospace; font-size:11px;">Sign In</button>
       </div>
     </div>
   </div>
@@ -318,35 +318,65 @@
 
 <div id="authModal" style="display:none; position:fixed; inset:0; background:rgba(17,21,26,0.8); z-index:100; align-items:center; justify-content:center; backdrop-filter:blur(4px);">
   <div style="background:var(--bg-elev); border:1px solid var(--border); padding:24px; border-radius:8px; width:320px; text-align:center;">
-    <h3 style="margin-top:0;">Sign In / Sign Up</h3>
+    <div style="display:flex; justify-content:space-around; margin-bottom:15px; border-bottom:1px solid var(--border);">
+      <button id="tabSignIn" style="background:none; border:none; color:var(--text); padding:8px; cursor:pointer; font-weight:bold; border-bottom:2px solid var(--amber);">Sign In</button>
+      <button id="tabSignUp" style="background:none; border:none; color:var(--text-faint); padding:8px; cursor:pointer; font-weight:bold; border-bottom:2px solid transparent;">Sign Up</button>
+    </div>
     <input type="email" id="authEmail" placeholder="Email" style="width:100%; margin-bottom:10px; padding:8px; background:var(--bg-elev-2); border:1px solid var(--border); color:var(--text); border-radius:4px;" />
     <input type="password" id="authPassword" placeholder="Password" style="width:100%; margin-bottom:15px; padding:8px; background:var(--bg-elev-2); border:1px solid var(--border); color:var(--text); border-radius:4px;" />
-    <button id="authSubmit" style="width:100%; padding:10px; background:var(--amber); color:#000; border:none; border-radius:4px; font-weight:600; cursor:pointer;">Continue</button>
+    <button id="authSubmit" style="width:100%; padding:10px; background:var(--amber); color:#000; border:none; border-radius:4px; font-weight:600; cursor:pointer;">Sign In</button>
     <button id="authClose" style="margin-top:10px; background:none; border:none; color:var(--text-faint); cursor:pointer;">Cancel</button>
     <div id="authError" style="color:var(--hard); font-size:12px; margin-top:10px; display:none;"></div>
+    <div id="authSuccess" style="color:var(--emerald); font-size:12px; margin-top:10px; display:none;"></div>
   </div>
 </div>
 
 <script>
 const SUPABASE_URL = 'https://shxlctwvfkfgivtnlvht.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_V1KrKiUr0gsQ86_lXYu63Q_GqYwyQb9';
-const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 let currentUser = null;
+let isSignUpMode = false;
 
 // Auth UI logic
 const authBtn = document.getElementById('authBtn');
 const authModal = document.getElementById('authModal');
+const tabSignIn = document.getElementById('tabSignIn');
+const tabSignUp = document.getElementById('tabSignUp');
 const authEmail = document.getElementById('authEmail');
 const authPassword = document.getElementById('authPassword');
 const authSubmit = document.getElementById('authSubmit');
 const authClose = document.getElementById('authClose');
 const authError = document.getElementById('authError');
+const authSuccess = document.getElementById('authSuccess');
+
+tabSignIn.addEventListener('click', () => {
+  isSignUpMode = false;
+  tabSignIn.style.color = 'var(--text)';
+  tabSignIn.style.borderBottom = '2px solid var(--amber)';
+  tabSignUp.style.color = 'var(--text-faint)';
+  tabSignUp.style.borderBottom = '2px solid transparent';
+  authSubmit.textContent = 'Sign In';
+  authError.style.display = 'none';
+  authSuccess.style.display = 'none';
+});
+
+tabSignUp.addEventListener('click', () => {
+  isSignUpMode = true;
+  tabSignUp.style.color = 'var(--text)';
+  tabSignUp.style.borderBottom = '2px solid var(--amber)';
+  tabSignIn.style.color = 'var(--text-faint)';
+  tabSignIn.style.borderBottom = '2px solid transparent';
+  authSubmit.textContent = 'Create Account';
+  authError.style.display = 'none';
+  authSuccess.style.display = 'none';
+});
 
 authBtn.addEventListener('click', async () => {
   if (currentUser) {
-    await supabase.auth.signOut();
+    await supabaseClient.auth.signOut();
     currentUser = null;
-    authBtn.textContent = 'Log In';
+    authBtn.textContent = 'Sign In';
     progress = {};
     syncAllRows();
     updateRailCounts();
@@ -361,42 +391,43 @@ authClose.addEventListener('click', () => { authModal.style.display = 'none'; })
 
 authSubmit.addEventListener('click', async () => {
   authError.style.display = 'none';
+  authSuccess.style.display = 'none';
   const email = authEmail.value;
   const password = authPassword.value;
   if(!email || !password) return;
   
   authSubmit.textContent = 'Wait...';
   
-  // Try to sign in
-  let { data, error } = await supabase.auth.signInWithPassword({ email, password });
-  
-  // If user doesn't exist, try to sign up
-  if (error && error.message.includes('Invalid login credentials')) {
-    const signup = await supabase.auth.signUp({ email, password });
-    data = signup.data;
-    error = signup.error;
-    if(!error && data.user) {
-        showSaveFlag('Account created! Please check your email to verify.');
-        authSubmit.textContent = 'Continue';
-        return;
+  if (isSignUpMode) {
+    const { data, error } = await supabaseClient.auth.signUp({ email, password });
+    if (error) {
+      authError.textContent = error.message;
+      authError.style.display = 'block';
+    } else {
+      authSuccess.textContent = 'Account created successfully! You can now sign in.';
+      authSuccess.style.display = 'block';
+      authEmail.value = '';
+      authPassword.value = '';
+      tabSignIn.click();
+    }
+  } else {
+    const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
+    if (error) {
+      authError.textContent = error.message;
+      authError.style.display = 'block';
+    } else {
+      authModal.style.display = 'none';
+      currentUser = data.user;
+      authBtn.textContent = 'Log Out';
+      await loadProgress();
+      showSaveFlag('Logged in!');
     }
   }
-
-  if (error) {
-    authError.textContent = error.message;
-    authError.style.display = 'block';
-  } else {
-    authModal.style.display = 'none';
-    currentUser = data.user;
-    authBtn.textContent = 'Log Out';
-    await loadProgress();
-    showSaveFlag('Logged in!');
-  }
-  authSubmit.textContent = 'Continue';
+  authSubmit.textContent = isSignUpMode ? 'Create Account' : 'Sign In';
 });
 
 // Check session on load
-supabase.auth.getSession().then(({ data: { session } }) => {
+supabaseClient.auth.getSession().then(({ data: { session } }) => {
   if (session) {
     currentUser = session.user;
     authBtn.textContent = 'Log Out';
@@ -719,7 +750,7 @@ async function persist(immediate){
   const doSave = async () => {
     try {
       if(currentUser) {
-        const { error } = await supabase
+        const { error } = await supabaseClient
           .from('user_progress')
           .upsert({ user_id: currentUser.id, progress_data: progress });
         if(error) throw error;
@@ -743,7 +774,7 @@ async function persist(immediate){
 async function loadProgress(){
   try {
     if(currentUser) {
-      const { data, error } = await supabase
+      const { data, error } = await supabaseClient
         .from('user_progress')
         .select('progress_data')
         .eq('user_id', currentUser.id)
