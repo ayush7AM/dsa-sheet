@@ -753,10 +753,13 @@ async function persist(immediate){
         const { error } = await supabaseClient
           .from('user_progress')
           .upsert({ user_id: currentUser.id, progress_data: progress });
-        if(error) throw error;
+        if(error) {
+          alert('Database Error (Save): ' + error.message + '\n\nDid you run the SQL script in Supabase?');
+          throw error;
+        }
         showSaveFlag('saved to cloud');
-      } else if(window.storage && window.storage.set){
-        await window.storage.set(STORAGE_KEY, JSON.stringify(progress), false);
+      } else {
+        window.localStorage.setItem(STORAGE_KEY, JSON.stringify(progress));
         showSaveFlag('saved locally');
       }
     } catch(err){
@@ -780,15 +783,21 @@ async function loadProgress(){
         .eq('user_id', currentUser.id)
         .single();
       
+      if (error && error.code !== 'PGRST116') {
+        // PGRST116 means no rows found (which is fine for new users)
+        // Any other error means the table is missing or RLS is blocking it
+        alert('Database Error (Load): ' + error.message + '\n\nDid you run the SQL script in Supabase?');
+      }
+      
       if (data && data.progress_data) {
          progress = data.progress_data;
       } else {
          progress = {};
       }
-    } else if(window.storage && window.storage.get){
-      const result = await window.storage.get(STORAGE_KEY, false);
-      if(result && result.value){
-        progress = JSON.parse(result.value);
+    } else {
+      const result = window.localStorage.getItem(STORAGE_KEY);
+      if(result){
+        progress = JSON.parse(result);
       }
     }
   } catch(err){
